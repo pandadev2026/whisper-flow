@@ -12,14 +12,29 @@ from whisper import Whisper
 
 models = {}
 
+_WHISPER_MODEL_NAMES = {
+    "tiny", "tiny.en", "base", "base.en",
+    "small", "small.en", "medium", "medium.en",
+    "large", "large-v2", "large-v3", "turbo",
+}
+
+def _device():
+    if torch.cuda.is_available():
+        return "cuda"
+    if torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
 
 def get_model(file_name="tiny.en.pt") -> Whisper:
-    """load models from disk"""
+    """load model by name (downloads to ~/.cache/whisper) or from local models/ dir"""
     if file_name not in models:
-        path = os.path.join(os.path.dirname(__file__), f"./models/{file_name}")
-        models[file_name] = whisper.load_model(path).to(
-            "cuda" if torch.cuda.is_available() else "cpu"
-        )
+        name = file_name.removesuffix(".pt")
+        if name in _WHISPER_MODEL_NAMES:
+            models[file_name] = whisper.load_model(name).to(_device())
+        else:
+            path = os.path.join(os.path.dirname(__file__), f"./models/{file_name}")
+            models[file_name] = whisper.load_model(path).to(_device())
     return models[file_name]
 
 
