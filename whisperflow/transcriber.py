@@ -38,6 +38,9 @@ def get_model(file_name="tiny.en.pt") -> Whisper:
     return models[file_name]
 
 
+_SILENCE_RMS_THRESHOLD = 0.01  # float32 normalised; below this → skip Whisper
+
+
 def transcribe_pcm_chunks(
     model: Whisper, chunks: list, lang="en", temperature=0.1, log_prob=-0.5
 ) -> dict:
@@ -45,6 +48,8 @@ def transcribe_pcm_chunks(
     arr = (
         np.frombuffer(b"".join(chunks), np.int16).flatten().astype(np.float32) / 32768.0
     )
+    if arr.size == 0 or float(np.sqrt(np.mean(arr ** 2))) < _SILENCE_RMS_THRESHOLD:
+        return {"text": ""}
     return model.transcribe(
         arr,
         fp16=False,

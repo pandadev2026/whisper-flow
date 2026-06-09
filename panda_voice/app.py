@@ -1,5 +1,6 @@
 import logging
 import threading
+import time
 
 import rumps
 
@@ -23,13 +24,14 @@ class PandaVoiceApp(rumps.App):
         self.model = model
         self.recorder = Recorder()
         self._meeting: MeetingRecorder | None = None
+        self._timer_stop: threading.Event | None = None
 
         self._menu_start_meeting = rumps.MenuItem("Start Meeting", callback=self._start_meeting)
         self._menu_stop_meeting = rumps.MenuItem("Stop Meeting", callback=self._stop_meeting)
         self._menu_stop_meeting.set_callback(None)  # disabled initially
 
         self.menu = [
-            rumps.MenuItem("Option+Space to dictate"),
+            rumps.MenuItem("Hold left Option to dictate"),
             None,
             self._menu_start_meeting,
             self._menu_stop_meeting,
@@ -71,16 +73,19 @@ class PandaVoiceApp(rumps.App):
             if not text:
                 return
             backend = self.config.polish_backend
-            if backend == "minimax" and self.config.minimax_api_key and len(text.split()) >= 3:
-                text = polisher.minimax_polish(
-                    text,
-                    api_key=self.config.minimax_api_key,
-                    group_id=self.config.minimax_group_id,
-                    model=self.config.minimax_model,
-                    base_url=self.config.minimax_url,
-                )
-            elif backend == "claude" and self.config.anthropic_api_key:
-                text = polisher.claude_polish(text, api_key=self.config.anthropic_api_key)
+            if self.config.polish_text and len(text.split()) >= 3:
+                if backend == "minimax" and self.config.minimax_api_key:
+                    text = polisher.minimax_polish(
+                        text,
+                        api_key=self.config.minimax_api_key,
+                        group_id=self.config.minimax_group_id,
+                        model=self.config.minimax_model,
+                        base_url=self.config.minimax_url,
+                    )
+                elif backend == "claude" and self.config.anthropic_api_key:
+                    text = polisher.claude_polish(text, api_key=self.config.anthropic_api_key)
+                elif backend == "ollama":
+                    text = polisher.polish(text, model=self.config.ollama_model, base_url=self.config.ollama_url)
             paste_text(text, restore_clipboard=self.config.restore_clipboard)
         except Exception as e:
             logger.error("Processing error: %s", e)
@@ -98,11 +103,27 @@ class PandaVoiceApp(rumps.App):
         self._menu_stop_meeting.set_callback(self._stop_meeting)
         self._meeting = MeetingRecorder(self.model, self.config)
         self._meeting.start()
+        self._timer_stop = threading.Event()
+        threading.Thread(
+            target=self._meeting_timer,
+            args=(time.monotonic(), self._timer_stop),
+            daemon=True,
+        ).start()
         rumps.notification("Panda Voice", "Meeting started", "Recording… click Stop Meeting when done.")
+
+    def _meeting_timer(self, start: float, stop: threading.Event):
+        while not stop.is_set():
+            elapsed = int(time.monotonic() - start)
+            m, s = divmod(elapsed, 60)
+            h, m = divmod(m, 60)
+            self.title = f"🔴 REC {h:02d}:{m:02d}:{s:02d}" if h else f"🔴 REC {m:02d}:{s:02d}"
+            stop.wait(1.0)
 
     def _stop_meeting(self, _):
         if self.state != AppState.MEETING or self._meeting is None:
             return
+        if self._timer_stop:
+            self._timer_stop.set()
         self._set_state(AppState.SUMMARIZING)
         self._menu_stop_meeting.set_callback(None)
         meeting = self._meeting
@@ -125,7 +146,8 @@ class PandaVoiceApp(rumps.App):
             rumps.notification("Panda Voice", "Meeting notes saved", path)
         except Exception as e:
             logger.error("Meeting finalization error: %s", e)
-            rumps.notification("Panda Voice", "Error generating notes", str(e))
+            raw = str(meeting.transcript_path) if meeting.transcript_path else "unknown"
+            rumps.notification("Panda Voice", "Error generating notes", f"Raw transcript saved to {raw}")
         finally:
             self._set_state(AppState.IDLE)
             self._menu_start_meeting.set_callback(self._start_meeting)
