@@ -4,10 +4,11 @@ import threading
 import rumps
 
 import whisperflow.transcriber as ts
-from panda_voice import polisher
+from panda_voice import polisher, summarizer
 from panda_voice.config import Config
 from panda_voice.hotkey import HotkeyManager
 from panda_voice.injector import paste_text
+from panda_voice.meeting import MeetingRecorder
 from panda_voice.recorder import Recorder
 from panda_voice.state import STATE_ICONS, AppState
 
@@ -21,9 +22,17 @@ class PandaVoiceApp(rumps.App):
         self.state = AppState.IDLE
         self.model = model
         self.recorder = Recorder()
+        self._meeting: MeetingRecorder | None = None
+
+        self._menu_start_meeting = rumps.MenuItem("Start Meeting", callback=self._start_meeting)
+        self._menu_stop_meeting = rumps.MenuItem("Stop Meeting", callback=self._stop_meeting)
+        self._menu_stop_meeting.set_callback(None)  # disabled initially
 
         self.menu = [
             rumps.MenuItem("Option+Space to dictate"),
+            None,
+            self._menu_start_meeting,
+            self._menu_stop_meeting,
             None,
         ]
 
@@ -32,6 +41,8 @@ class PandaVoiceApp(rumps.App):
             on_deactivate=self._on_hotkey_up,
         )
         self.hotkey.start()
+
+    # ── PTT ──────────────────────────────────────────────────────────────────
 
     def _set_state(self, state: AppState):
         self.state = state
@@ -70,3 +81,50 @@ class PandaVoiceApp(rumps.App):
             logger.error("Processing error: %s", e)
         finally:
             self._set_state(AppState.IDLE)
+
+    # ── Meeting ───────────────────────────────────────────────────────────────
+
+    def _start_meeting(self, _):
+        if self.state != AppState.IDLE:
+            rumps.alert("Panda Voice", "Finish current action before starting a meeting.")
+            return
+        if not self.config.anthropic_api_key:
+            rumps.alert(
+                "API Key Missing",
+                "Set anthropic_api_key in ~/.panda-voice/config.json to use Meeting Notes.",
+            )
+            return
+        self._set_state(AppState.MEETING)
+        self._menu_start_meeting.set_callback(None)
+        self._menu_stop_meeting.set_callback(self._stop_meeting)
+        self._meeting = MeetingRecorder(self.model, self.config)
+        self._meeting.start()
+        rumps.notification("Panda Voice", "Meeting started", "Recording… click Stop Meeting when done.")
+
+    def _stop_meeting(self, _):
+        if self.state != AppState.MEETING or self._meeting is None:
+            return
+        self._set_state(AppState.SUMMARIZING)
+        self._menu_stop_meeting.set_callback(None)
+        meeting = self._meeting
+        self._meeting = None
+        threading.Thread(target=self._finalize_meeting, args=(meeting,), daemon=True).start()
+
+    def _finalize_meeting(self, meeting: MeetingRecorder):
+        try:
+            segments = meeting.stop()
+            if not segments:
+                rumps.notification("Panda Voice", "Meeting ended", "No speech detected.")
+                return
+            path = summarizer.summarize(
+                segments,
+                api_key=self.config.anthropic_api_key,
+                output_dir=self.config.output_dir,
+            )
+            rumps.notification("Panda Voice", "Meeting notes saved", path)
+        except Exception as e:
+            logger.error("Meeting finalization error: %s", e)
+            rumps.notification("Panda Voice", "Error generating notes", str(e))
+        finally:
+            self._set_state(AppState.IDLE)
+            self._menu_start_meeting.set_callback(self._start_meeting)
