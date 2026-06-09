@@ -69,13 +69,37 @@ if [ -n "$OLD_RPATH" ]; then
     echo "  Rewrote rpath: $OLD_RPATH → @loader_path/libportaudio.2.dylib"
 fi
 
-# ── 5. Compile Swift launcher ────────────────────────────────────────────────
+# ── 5. Bundle Python.framework dylib ─────────────────────────────────────────
+echo "▶ Bundling Python.framework..."
+# Find the Cellar path baked into the venv Python binary
+OLD_PY_DYLIB=$(otool -L "$RESOURCES/.venv/bin/python" | awk '/Cellar.*Python/{print $1}')
+if [ -z "$OLD_PY_DYLIB" ]; then
+    echo "ERROR: could not detect Homebrew Python dylib path in venv"
+    exit 1
+fi
+
+# Copy the dylib into Contents/Frameworks/ (preserving framework subdirectory structure)
+PY_FW_DEST="$FRAMEWORKS/Python.framework/Versions/3.12"
+mkdir -p "$PY_FW_DEST"
+cp "$OLD_PY_DYLIB" "$PY_FW_DEST/Python"
+chmod 755 "$PY_FW_DEST/Python"
+
+# Rewrite the reference in all three Python binaries
+NEW_PY_REF="@executable_path/../../../Frameworks/Python.framework/Versions/3.12/Python"
+for PY_BIN in "$RESOURCES/.venv/bin/python" "$RESOURCES/.venv/bin/python3" "$RESOURCES/.venv/bin/python3.12"; do
+    if [ -f "$PY_BIN" ]; then
+        install_name_tool -change "$OLD_PY_DYLIB" "$NEW_PY_REF" "$PY_BIN"
+    fi
+done
+echo "  Rewrote Python.framework ref: $(basename "$OLD_PY_DYLIB" | cut -c1-60)... → @executable_path/../../../Frameworks/..."
+
+# ── 7. Compile Swift launcher ────────────────────────────────────────────────
 echo "▶ Compiling Swift launcher..."
 swiftc -O -strict-concurrency=minimal \
     "$SCRIPT_DIR/swift_launcher/main.swift" \
     -o "$MACOS/PandaVoice"
 
-# ── 6. Verify ────────────────────────────────────────────────────────────────
+# ── 8. Verify ────────────────────────────────────────────────────────────────
 echo ""
 echo "▶ Verifying bundle..."
 PYTHON_BIN="$RESOURCES/.venv/bin/python"
