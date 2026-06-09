@@ -1,0 +1,3 @@
+#!/bin/bash
+DIR="/Users/panda/panda-voice-control"
+exec "$DIR/.venv/bin/python" "$DIR/launch.py"

@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Panda Voice</string>
+    <key>CFBundleDisplayName</key>
+    <string>Panda Voice</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.pandadev.pandavoice</string>
+    <key>CFBundleVersion</key>
+    <string>1.0</string>
+    <key>CFBundleExecutable</key>
+    <string>PandaVoice</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Panda Voice needs microphone access for voice input.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Panda Voice needs to send keystrokes to other apps.</string>
+</dict>
+</plist>
