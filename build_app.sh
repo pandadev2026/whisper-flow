@@ -78,20 +78,34 @@ if [ -z "$OLD_PY_DYLIB" ]; then
     exit 1
 fi
 
-# Copy the dylib into Contents/Frameworks/ (preserving framework subdirectory structure)
+# Copy dylib + Python.app launcher into Contents/Frameworks/
+PY_FW_SRC=$(dirname "$(dirname "$OLD_PY_DYLIB")")/  # .../Versions/3.12/
 PY_FW_DEST="$FRAMEWORKS/Python.framework/Versions/3.12"
 mkdir -p "$PY_FW_DEST"
 cp "$OLD_PY_DYLIB" "$PY_FW_DEST/Python"
 chmod 755 "$PY_FW_DEST/Python"
+# Python re-execs itself through Python.app for GUI/menu-bar support
+cp -r "$(dirname "$OLD_PY_DYLIB")/Resources" "$PY_FW_DEST/"
 
-# Rewrite the reference in all three Python binaries
+# Rewrite Cellar reference in the three venv Python binaries
 NEW_PY_REF="@executable_path/../../../Frameworks/Python.framework/Versions/3.12/Python"
 for PY_BIN in "$RESOURCES/.venv/bin/python" "$RESOURCES/.venv/bin/python3" "$RESOURCES/.venv/bin/python3.12"; do
     if [ -f "$PY_BIN" ]; then
-        install_name_tool -change "$OLD_PY_DYLIB" "$NEW_PY_REF" "$PY_BIN"
+        OLD_REF=$(otool -L "$PY_BIN" | awk '/Cellar.*Python/{print $1}')
+        [ -n "$OLD_REF" ] && install_name_tool -change "$OLD_REF" "$NEW_PY_REF" "$PY_BIN" 2>/dev/null
+        codesign --force --sign - "$PY_BIN" 2>/dev/null
     fi
 done
-echo "  Rewrote Python.framework ref: $(basename "$OLD_PY_DYLIB" | cut -c1-60)... → @executable_path/../../../Frameworks/..."
+
+# The Python.app launcher sits 4 levels deep — needs a different relative path
+LAUNCHER="$PY_FW_DEST/Resources/Python.app/Contents/MacOS/Python"
+OLD_REF=$(otool -L "$LAUNCHER" | awk '/Cellar.*Python/{print $1}')
+if [ -n "$OLD_REF" ]; then
+    # @executable_path from MacOS/ goes up 4 levels to reach Versions/3.12/Python
+    install_name_tool -change "$OLD_REF" "@executable_path/../../../../Python" "$LAUNCHER" 2>/dev/null
+fi
+codesign --force --sign - "$LAUNCHER" 2>/dev/null
+echo "  Bundled Python.framework + Python.app launcher, ad-hoc signed."
 
 # ── 7. Compile Swift launcher ────────────────────────────────────────────────
 echo "▶ Compiling Swift launcher..."
