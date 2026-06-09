@@ -27,7 +27,7 @@ class Recorder:
     def stop(self) -> list:
         with self._lock:
             self._recording = False
-        if self._thread:
+        if self._thread and self._thread.ident is not None:
             self._thread.join(timeout=2.0)
         return list(self._chunks)
 

@@ -1,9 +1,17 @@
 import logging
 import sys
+from pathlib import Path
+
+_log_file = Path.home() / ".panda-voice" / "panda-voice.log"
+_log_file.parent.mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.FileHandler(_log_file),
+        logging.StreamHandler(sys.stderr),
+    ],
 )
 logger = logging.getLogger(__name__)
 
