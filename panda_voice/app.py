@@ -1,6 +1,8 @@
 import logging
+import subprocess
 import threading
 import time
+from pathlib import Path
 
 import rumps
 
@@ -15,6 +17,9 @@ from panda_voice.state import STATE_ICONS, AppState
 
 logger = logging.getLogger(__name__)
 
+PTT_WARN_SECS = 55
+PTT_MAX_SECS = 60
+
 
 class PandaVoiceApp(rumps.App):
     def __init__(self, model):
@@ -25,10 +30,16 @@ class PandaVoiceApp(rumps.App):
         self.recorder = Recorder()
         self._meeting: MeetingRecorder | None = None
         self._timer_stop: threading.Event | None = None
+        self._ptt_stop: threading.Event | None = None
 
         self._menu_start_meeting = rumps.MenuItem("Start Meeting", callback=self._start_meeting)
         self._menu_stop_meeting = rumps.MenuItem("Stop Meeting", callback=self._stop_meeting)
-        self._menu_stop_meeting.set_callback(None)  # disabled initially
+        self._menu_stop_meeting.set_callback(None)
+
+        self._menu_last_notes = rumps.MenuItem("Last Notes")
+        self._menu_open_folder = rumps.MenuItem("Open Notes Folder", callback=self._open_notes_folder)
+
+        self._menu_settings = self._build_settings_menu()
 
         self.menu = [
             rumps.MenuItem("Hold left Option to dictate"),
@@ -36,7 +47,14 @@ class PandaVoiceApp(rumps.App):
             self._menu_start_meeting,
             self._menu_stop_meeting,
             None,
+            self._menu_last_notes,
+            self._menu_open_folder,
+            None,
+            self._menu_settings,
+            None,
         ]
+
+        self._refresh_last_notes()
 
         self.hotkey = HotkeyManager(
             on_activate=self._on_hotkey_down,
@@ -55,8 +73,19 @@ class PandaVoiceApp(rumps.App):
             return
         self._set_state(AppState.RECORDING)
         self.recorder.start()
+        self._ptt_stop = threading.Event()
+        threading.Thread(target=self._ptt_watchdog, args=(self._ptt_stop,), daemon=True).start()
+
+    def _ptt_watchdog(self, stop: threading.Event):
+        if not stop.wait(PTT_WARN_SECS):
+            rumps.notification("Panda Voice", "Still recording…", "Auto-stopping in 5 seconds.")
+        if not stop.wait(PTT_MAX_SECS - PTT_WARN_SECS):
+            logger.info("PTT max duration reached — auto-stopping")
+            self._on_hotkey_up()
 
     def _on_hotkey_up(self):
+        if self._ptt_stop:
+            self._ptt_stop.set()
         if self.state != AppState.RECORDING:
             return
         chunks = self.recorder.stop()
@@ -143,6 +172,7 @@ class PandaVoiceApp(rumps.App):
                 ollama_model=self.config.ollama_model,
                 ollama_url=self.config.ollama_url,
             )
+            self._refresh_last_notes()
             rumps.notification("Panda Voice", "Meeting notes saved", path)
         except Exception as e:
             logger.error("Meeting finalization error: %s", e)
@@ -151,3 +181,138 @@ class PandaVoiceApp(rumps.App):
         finally:
             self._set_state(AppState.IDLE)
             self._menu_start_meeting.set_callback(self._start_meeting)
+
+    # ── Last Notes ────────────────────────────────────────────────────────────
+
+    def _refresh_last_notes(self):
+        folder = Path(self.config.output_dir)
+        self._menu_last_notes.clear()
+        if folder.exists():
+            files = sorted(folder.glob("*.md"), key=lambda f: f.stat().st_mtime, reverse=True)[:5]
+        else:
+            files = []
+        if files:
+            for f in files:
+                item = rumps.MenuItem(f.stem, callback=lambda _, p=f: subprocess.run(["open", str(p)]))
+                self._menu_last_notes.add(item)
+        else:
+            placeholder = rumps.MenuItem("No notes yet")
+            placeholder.set_callback(None)
+            self._menu_last_notes.add(placeholder)
+
+    def _open_notes_folder(self, _):
+        folder = Path(self.config.output_dir)
+        folder.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["open", str(folder)])
+
+    # ── Settings ──────────────────────────────────────────────────────────────
+
+    _MODELS = ["tiny", "base", "small", "medium"]
+    _BACKENDS = ["minimax", "ollama", "claude", "none"]
+
+    def _build_settings_menu(self) -> rumps.MenuItem:
+        # Whisper model submenu
+        self._model_items: dict[str, rumps.MenuItem] = {}
+        menu_model = rumps.MenuItem("Whisper Model")
+        for name in self._MODELS:
+            item = rumps.MenuItem(name, callback=self._set_model)
+            item.state = 1 if name == self.config.model else 0
+            self._model_items[name] = item
+            menu_model.add(item)
+
+        # Polish text toggle
+        self._menu_polish_toggle = rumps.MenuItem("", callback=self._toggle_polish)
+        self._update_polish_label()
+
+        # Polish backend submenu
+        self._backend_items: dict[str, rumps.MenuItem] = {}
+        menu_backend = rumps.MenuItem("Polish Backend")
+        for name in self._BACKENDS:
+            item = rumps.MenuItem(name, callback=self._set_backend)
+            item.state = 1 if name == self.config.polish_backend else 0
+            self._backend_items[name] = item
+            menu_backend.add(item)
+
+        # API key dialog
+        menu_api_key = rumps.MenuItem("Set API Key…", callback=self._set_api_key)
+
+        # Launch at login toggle
+        self._menu_login = rumps.MenuItem("Launch at Login", callback=self._toggle_login)
+        self._menu_login.state = 1 if self._has_login_item() else 0
+
+        settings = rumps.MenuItem("Settings")
+        settings.add(menu_model)
+        settings.add(None)
+        settings.add(self._menu_polish_toggle)
+        settings.add(menu_backend)
+        settings.add(None)
+        settings.add(menu_api_key)
+        settings.add(None)
+        settings.add(self._menu_login)
+        return settings
+
+    def _update_polish_label(self):
+        state = "ON" if self.config.polish_text else "OFF"
+        self._menu_polish_toggle.title = f"Polish Text: {state}"
+
+    def _set_model(self, sender):
+        for name, item in self._model_items.items():
+            item.state = 1 if name == sender.title else 0
+        self.config.model = sender.title
+        self.config.save()
+
+    def _toggle_polish(self, _):
+        self.config.polish_text = not self.config.polish_text
+        self.config.save()
+        self._update_polish_label()
+
+    def _set_backend(self, sender):
+        for name, item in self._backend_items.items():
+            item.state = 1 if name == sender.title else 0
+        self.config.polish_backend = sender.title
+        self.config.save()
+
+    def _set_api_key(self, _):
+        win = rumps.Window(
+            message="Enter your Anthropic API key (sk-ant-…).\nLeave blank to clear.",
+            title="Panda Voice — API Key",
+            default_text=self.config.anthropic_api_key or "",
+            ok="Save",
+            cancel="Cancel",
+            dimensions=(400, 24),
+        )
+        resp = win.run()
+        if resp.clicked:
+            self.config.anthropic_api_key = resp.text.strip()
+            self.config.save()
+            status = "saved" if self.config.anthropic_api_key else "cleared"
+            rumps.notification("Panda Voice", "API Key", f"Anthropic API key {status}.")
+
+    def _app_bundle_path(self) -> str:
+        return str(Path(__file__).parent.parent / "Panda Voice.app")
+
+    def _has_login_item(self) -> bool:
+        result = subprocess.run(
+            ["osascript", "-e",
+             'tell application "System Events" to return (name of login items) contains "Panda Voice"'],
+            capture_output=True, text=True,
+        )
+        return result.stdout.strip() == "true"
+
+    def _toggle_login(self, _):
+        if self._has_login_item():
+            subprocess.run(
+                ["osascript", "-e",
+                 'tell application "System Events" to delete login item "Panda Voice"'],
+                capture_output=True,
+            )
+            self._menu_login.state = 0
+        else:
+            app_path = self._app_bundle_path()
+            subprocess.run(
+                ["osascript", "-e",
+                 f'tell application "System Events" to make login item at end'
+                 f' with properties {{path:"{app_path}", hidden:false}}'],
+                capture_output=True,
+            )
+            self._menu_login.state = 1
