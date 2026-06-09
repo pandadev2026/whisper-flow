@@ -7,7 +7,7 @@ from pathlib import Path
 import rumps
 
 import whisperflow.transcriber as ts
-from panda_voice import polisher, summarizer
+from panda_voice import permissions, polisher, summarizer
 from panda_voice.config import Config
 from panda_voice.hotkey import HotkeyManager
 from panda_voice.injector import paste_text
@@ -56,11 +56,35 @@ class PandaVoiceApp(rumps.App):
 
         self._refresh_last_notes()
 
+        threading.Thread(target=self._onboarding_check, daemon=True).start()
+
         self.hotkey = HotkeyManager(
             on_activate=self._on_hotkey_down,
             on_deactivate=self._on_hotkey_up,
         )
         self.hotkey.start()
+
+    # ── Onboarding ───────────────────────────────────────────────────────────
+
+    def _onboarding_check(self):
+        time.sleep(1.5)  # let NSApplication finish launching
+        for issue in permissions.missing():
+            if issue["can_prompt"]:
+                ok_label, cancel_label = "Request Access", "Later"
+            else:
+                ok_label, cancel_label = "Open Settings", "Later"
+
+            resp = rumps.alert(
+                title=f"Panda Voice — {issue['name']} Required",
+                message=issue["message"],
+                ok=ok_label,
+                cancel=cancel_label,
+            )
+            if resp == 1:
+                if issue["can_prompt"]:
+                    permissions.request_microphone()
+                else:
+                    permissions.open_settings(issue["url"])
 
     # ── PTT ──────────────────────────────────────────────────────────────────
 
