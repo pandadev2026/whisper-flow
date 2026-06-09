@@ -70,12 +70,8 @@ class PandaVoiceApp(rumps.App):
             text = result.get("text", "").strip()
             if not text:
                 return
-            if self.config.polish_text and self.config.polish_backend == "ollama":
-                text = polisher.polish(
-                    text,
-                    model=self.config.ollama_model,
-                    base_url=self.config.ollama_url,
-                )
+            if self.config.anthropic_api_key and self.config.polish_backend == "claude":
+                text = polisher.claude_polish(text, api_key=self.config.anthropic_api_key)
             paste_text(text, restore_clipboard=self.config.restore_clipboard)
         except Exception as e:
             logger.error("Processing error: %s", e)

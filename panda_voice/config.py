@@ -11,8 +11,8 @@ DEFAULTS = {
     "output_dir": str(Path.home() / "Documents" / "MeetingNotes"),
     "anthropic_api_key": "",
     "restore_clipboard": True,
-    "polish_text": True,
-    "polish_backend": "ollama",  # ollama | claude | rules | none
+    "polish_text": False,
+    "polish_backend": "claude",  # claude | ollama | none
     "ollama_model": "qwen2.5:7b",
     "ollama_url": "http://localhost:11434",
 }

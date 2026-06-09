@@ -40,6 +40,24 @@ def polish(
         return text
 
 
+def claude_polish(text: str, api_key: str) -> str:
+    if not text.strip():
+        return text
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1024,
+            system=_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": text}],
+        )
+        return message.content[0].text.strip()
+    except Exception as e:
+        logger.warning("Claude polish failed, using raw transcript: %s", e)
+        return text
+
+
 def warm_up(model: str = "qwen2.5:7b", base_url: str = "http://localhost:11434"):
     """Send a dummy request to load the model into GPU memory before first use."""
     try:
