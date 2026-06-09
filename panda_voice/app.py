@@ -88,12 +88,6 @@ class PandaVoiceApp(rumps.App):
         if self.state != AppState.IDLE:
             rumps.alert("Panda Voice", "Finish current action before starting a meeting.")
             return
-        if not self.config.anthropic_api_key:
-            rumps.alert(
-                "API Key Missing",
-                "Set anthropic_api_key in ~/.panda-voice/config.json to use Meeting Notes.",
-            )
-            return
         self._set_state(AppState.MEETING)
         self._menu_start_meeting.set_callback(None)
         self._menu_stop_meeting.set_callback(self._stop_meeting)
@@ -118,8 +112,10 @@ class PandaVoiceApp(rumps.App):
                 return
             path = summarizer.summarize(
                 segments,
-                api_key=self.config.anthropic_api_key,
                 output_dir=self.config.output_dir,
+                api_key=self.config.anthropic_api_key,
+                ollama_model=self.config.ollama_model,
+                ollama_url=self.config.ollama_url,
             )
             rumps.notification("Panda Voice", "Meeting notes saved", path)
         except Exception as e:
