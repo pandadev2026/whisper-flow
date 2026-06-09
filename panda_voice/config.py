@@ -16,6 +16,7 @@ DEFAULTS = {
     "ollama_model": "qwen2.5:7b",
     "ollama_url": "http://localhost:11434",
     "minimax_api_key": "",
+    "minimax_group_id": "",
     "minimax_model": "MiniMax-Text-01",
     "minimax_url": "https://api.minimax.chat/v1",
 }

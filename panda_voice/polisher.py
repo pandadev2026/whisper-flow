@@ -43,14 +43,18 @@ def polish(
 def minimax_polish(
     text: str,
     api_key: str,
+    group_id: str = "",
     model: str = "MiniMax-Text-01",
     base_url: str = "https://api.minimax.chat/v1",
 ) -> str:
     if not text.strip():
         return text
     try:
+        url = f"{base_url}/chat/completions"
+        if group_id:
+            url += f"?GroupId={group_id}"
         resp = httpx.post(
-            f"{base_url}/chat/completions",
+            url,
             headers={"Authorization": f"Bearer {api_key}"},
             json={
                 "model": model,

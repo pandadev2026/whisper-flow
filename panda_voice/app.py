@@ -75,6 +75,7 @@ class PandaVoiceApp(rumps.App):
                 text = polisher.minimax_polish(
                     text,
                     api_key=self.config.minimax_api_key,
+                    group_id=self.config.minimax_group_id,
                     model=self.config.minimax_model,
                     base_url=self.config.minimax_url,
                 )
