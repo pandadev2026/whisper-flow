@@ -39,12 +39,18 @@ func main() {
     let fifoPath = "/tmp/panda-hotkey-\(ProcessInfo.processInfo.processIdentifier).fifo"
     Darwin.mkfifo(fifoPath, 0o600)
 
-    let projectDir = (Bundle.main.bundlePath as NSString).deletingLastPathComponent
+    // Support two layouts:
+    //  - Packaged .app: Python lives in Contents/Resources/.venv/
+    //  - Dev mode: Python lives in ../.venv/ (project dir next to .app)
+    let resourcePath = Bundle.main.resourcePath!
+    let devDir = (Bundle.main.bundlePath as NSString).deletingLastPathComponent
+    let usePackaged = FileManager.default.fileExists(atPath: "\(resourcePath)/.venv/bin/python")
+    let baseDir = usePackaged ? resourcePath : devDir
 
     let process = Process()
-    process.executableURL = URL(fileURLWithPath: "\(projectDir)/.venv/bin/python")
-    process.arguments = ["\(projectDir)/launch.py"]
-    process.currentDirectoryURL = URL(fileURLWithPath: projectDir)
+    process.executableURL = URL(fileURLWithPath: "\(baseDir)/.venv/bin/python")
+    process.arguments = ["\(baseDir)/launch.py"]
+    process.currentDirectoryURL = URL(fileURLWithPath: baseDir)
     process.environment = ProcessInfo.processInfo.environment.merging([
         "PANDA_SWIFT_LAUNCHER": "1",
         "PANDA_HOTKEY_FIFO": fifoPath,
