@@ -14,19 +14,13 @@ def main():
 
     print("🎤 Panda Voice starting...")
 
-    print("   Loading Whisper model (base)...")
+    print(f"   Loading Whisper model ({config.model})...")
     import whisperflow.transcriber as ts
-    model = ts.get_model("base")
+    model = ts.get_model(config.model)
     print("   Whisper ready ✓")
 
-    if config.polish_text and config.polish_backend == "ollama":
-        print(f"   Warming up Ollama ({config.ollama_model})...")
-        from panda_voice import polisher
-        polisher.warm_up(model=config.ollama_model, base_url=config.ollama_url)
-        print("   Ollama ready ✓")
-
     print("   Starting menu bar app...")
-    print("   Hold Option+Space to dictate into any app.\n")
+    print("   Hold left Option to dictate into any app.\n")
 
     from panda_voice.app import PandaVoiceApp
     PandaVoiceApp(model).run()
