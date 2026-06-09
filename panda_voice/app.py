@@ -70,7 +70,15 @@ class PandaVoiceApp(rumps.App):
             text = result.get("text", "").strip()
             if not text:
                 return
-            if self.config.anthropic_api_key and self.config.polish_backend == "claude":
+            backend = self.config.polish_backend
+            if backend == "minimax" and self.config.minimax_api_key:
+                text = polisher.minimax_polish(
+                    text,
+                    api_key=self.config.minimax_api_key,
+                    model=self.config.minimax_model,
+                    base_url=self.config.minimax_url,
+                )
+            elif backend == "claude" and self.config.anthropic_api_key:
                 text = polisher.claude_polish(text, api_key=self.config.anthropic_api_key)
             paste_text(text, restore_clipboard=self.config.restore_clipboard)
         except Exception as e:

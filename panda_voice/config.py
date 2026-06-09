@@ -5,16 +5,19 @@ CONFIG_DIR = Path.home() / ".panda-voice"
 CONFIG_FILE = CONFIG_DIR / "config.json"
 
 DEFAULTS = {
-    "hotkey": "<alt>+<space>",
+    "hotkey": "<alt_l>",
     "model": "base",
     "language": "auto",
     "output_dir": str(Path.home() / "Documents" / "MeetingNotes"),
     "anthropic_api_key": "",
     "restore_clipboard": True,
     "polish_text": False,
-    "polish_backend": "claude",  # claude | ollama | none
+    "polish_backend": "minimax",  # minimax | claude | ollama | none
     "ollama_model": "qwen2.5:7b",
     "ollama_url": "http://localhost:11434",
+    "minimax_api_key": "",
+    "minimax_model": "MiniMax-Text-01",
+    "minimax_url": "https://api.minimax.chat/v1",
 }
 
 

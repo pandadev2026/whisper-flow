@@ -40,6 +40,34 @@ def polish(
         return text
 
 
+def minimax_polish(
+    text: str,
+    api_key: str,
+    model: str = "MiniMax-Text-01",
+    base_url: str = "https://api.minimax.chat/v1",
+) -> str:
+    if not text.strip():
+        return text
+    try:
+        resp = httpx.post(
+            f"{base_url}/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "user", "content": text},
+                ],
+            },
+            timeout=15.0,
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        logger.warning("MiniMax polish failed, using raw transcript: %s", e)
+        return text
+
+
 def claude_polish(text: str, api_key: str) -> str:
     if not text.strip():
         return text
