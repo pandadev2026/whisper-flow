@@ -42,8 +42,16 @@ class HotkeyManager:
                     elif cmd == "U" and self._active:
                         self._active = False
                         threading.Thread(target=self._on_deactivate, daemon=True).start()
+            logger.error("FIFO closed — Swift launcher exited; falling back to pynput")
         except OSError as e:
-            logger.error("FIFO read error (Swift launcher exited?): %s", e)
+            logger.error("FIFO read error: %s — falling back to pynput", e)
+        # Swift is gone — re-register hotkeys via pynput so the app stays usable
+        self._listener = keyboard.Listener(
+            on_press=self._on_press,
+            on_release=self._on_release,
+        )
+        self._listener.start()
+        logger.info("pynput fallback active")
 
     def _on_press(self, key):
         if not self._active and key == Key.alt_l:

@@ -31,6 +31,7 @@ class PandaVoiceApp(rumps.App):
         self._meeting: MeetingRecorder | None = None
         self._timer_stop: threading.Event | None = None
         self._ptt_stop: threading.Event | None = None
+        self._state_lock = threading.Lock()
 
         self._menu_start_meeting = rumps.MenuItem("Start Meeting", callback=self._start_meeting)
         self._menu_stop_meeting = rumps.MenuItem("Stop Meeting", callback=self._stop_meeting)
@@ -111,10 +112,11 @@ class PandaVoiceApp(rumps.App):
     def _on_hotkey_up(self):
         if self._ptt_stop:
             self._ptt_stop.set()
-        if self.state != AppState.RECORDING:
-            return
+        with self._state_lock:
+            if self.state != AppState.RECORDING:
+                return
+            self._set_state(AppState.TRANSCRIBING)
         chunks = self.recorder.stop()
-        self._set_state(AppState.TRANSCRIBING)
         threading.Thread(target=self._process, args=(chunks,), daemon=True).start()
 
     def _process(self, chunks):
@@ -328,7 +330,7 @@ class PandaVoiceApp(rumps.App):
         return result.stdout.strip() == "true"
 
     def _toggle_login(self, _):
-        if self._has_login_item():
+        if self._menu_login.state == 1:
             subprocess.run(
                 ["osascript", "-e",
                  'tell application "System Events" to delete login item "Panda Voice"'],

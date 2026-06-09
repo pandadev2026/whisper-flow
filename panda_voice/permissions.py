@@ -21,16 +21,21 @@ def accessibility_granted() -> bool:
         return True
 
 
+_av_capture_device = None
+
+
 def microphone_status() -> int:
     """Returns AVAuthorizationStatus int: 0=notDetermined, 1=restricted, 2=denied, 3=authorized."""
+    global _av_capture_device
     try:
-        import objc
-        objc.loadBundle(
-            "AVFoundation", globals(),
-            bundle_path="/System/Library/Frameworks/AVFoundation.framework",
-        )
-        AVCaptureDevice = objc.lookUpClass("AVCaptureDevice")
-        return int(AVCaptureDevice.authorizationStatusForMediaType_("soun"))
+        if _av_capture_device is None:
+            import objc
+            objc.loadBundle(
+                "AVFoundation", globals(),
+                bundle_path="/System/Library/Frameworks/AVFoundation.framework",
+            )
+            _av_capture_device = objc.lookUpClass("AVCaptureDevice")
+        return int(_av_capture_device.authorizationStatusForMediaType_("soun"))
     except Exception as e:
         logger.warning("Could not check Microphone permission: %s", e)
         return _AV_AUTHORIZED
@@ -41,14 +46,18 @@ def request_microphone() -> bool:
     try:
         import pyaudio
         pa = pyaudio.PyAudio()
-        stream = pa.open(
-            format=pyaudio.paInt16, channels=1, rate=16000,
-            input=True, frames_per_buffer=512,
-        )
-        stream.read(512, exception_on_overflow=False)
-        stream.close()
-        pa.terminate()
-        return True
+        stream = None
+        try:
+            stream = pa.open(
+                format=pyaudio.paInt16, channels=1, rate=16000,
+                input=True, frames_per_buffer=512,
+            )
+            stream.read(512, exception_on_overflow=False)
+            return True
+        finally:
+            if stream is not None:
+                stream.close()
+            pa.terminate()
     except Exception:
         return False
 
