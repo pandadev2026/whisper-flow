@@ -186,7 +186,10 @@ class PandaVoiceApp(rumps.App):
 
     def _refresh_last_notes(self):
         folder = Path(self.config.output_dir)
-        self._menu_last_notes.clear()
+        try:
+            self._menu_last_notes.clear()
+        except AttributeError:
+            pass  # NSMenu not yet initialised on first call
         if folder.exists():
             files = sorted(folder.glob("*.md"), key=lambda f: f.stat().st_mtime, reverse=True)[:5]
         else:
@@ -207,7 +210,7 @@ class PandaVoiceApp(rumps.App):
 
     # ── Settings ──────────────────────────────────────────────────────────────
 
-    _MODELS = ["tiny", "base", "small", "medium"]
+    _MODELS = ["tiny", "base", "small", "medium", "turbo"]
     _BACKENDS = ["minimax", "ollama", "claude", "none"]
 
     def _build_settings_menu(self) -> rumps.MenuItem:
