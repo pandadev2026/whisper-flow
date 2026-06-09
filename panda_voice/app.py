@@ -56,7 +56,8 @@ class PandaVoiceApp(rumps.App):
 
         self._refresh_last_notes()
 
-        threading.Thread(target=self._onboarding_check, daemon=True).start()
+        self._onboarding_timer = rumps.Timer(self._onboarding_check, 1.5)
+        self._onboarding_timer.start()
 
         self.hotkey = HotkeyManager(
             on_activate=self._on_hotkey_down,
@@ -66,8 +67,8 @@ class PandaVoiceApp(rumps.App):
 
     # ── Onboarding ───────────────────────────────────────────────────────────
 
-    def _onboarding_check(self):
-        time.sleep(1.5)  # let NSApplication finish launching
+    def _onboarding_check(self, timer: rumps.Timer):
+        timer.stop()  # fire once only
         for issue in permissions.missing():
             if issue["can_prompt"]:
                 ok_label, cancel_label = "Request Access", "Later"
