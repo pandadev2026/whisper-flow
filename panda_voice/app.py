@@ -71,7 +71,7 @@ class PandaVoiceApp(rumps.App):
             if not text:
                 return
             backend = self.config.polish_backend
-            if backend == "minimax" and self.config.minimax_api_key:
+            if backend == "minimax" and self.config.minimax_api_key and len(text.split()) >= 3:
                 text = polisher.minimax_polish(
                     text,
                     api_key=self.config.minimax_api_key,
