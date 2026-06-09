@@ -45,10 +45,9 @@ def transcribe_pcm_chunks(
     arr = (
         np.frombuffer(b"".join(chunks), np.int16).flatten().astype(np.float32) / 32768.0
     )
-    use_fp16 = torch.backends.mps.is_available() or torch.cuda.is_available()
     return model.transcribe(
         arr,
-        fp16=use_fp16,
+        fp16=False,
         language=lang,
         logprob_threshold=log_prob,
         temperature=temperature,
